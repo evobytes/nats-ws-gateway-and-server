@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WebSocket Chat Demo</title>
+</head>
+<body>
+  <h2>Chat</h2>
+  <textarea id="log" cols="80" rows="10" readonly></textarea><br>
+  <input type="text" id="msg" placeholder="Type message..." autofocus />
+  <button onclick="sendMsg()">Send</button>
+
+  <script>
+    const log = document.getElementById("log");
+    const ws = new WebSocket("wss://myserver.domain/hive-ws/");
+
+    ws.onmessage = event => {
+      const { type, data } = JSON.parse(event.data);
+      log.value += `[${type}] ${data}\n`;
+    };
+
+    function sendMsg() {
+      const text = document.getElementById("msg").value;
+      ws.send(JSON.stringify({ type: "chat", data: text }));
+      document.getElementById("msg").value = "";
+    }
+  </script>
+</body>
+</html>
+
