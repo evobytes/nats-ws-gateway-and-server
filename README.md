@@ -8,7 +8,7 @@ Using a Linux/Unix system, pull the repo and
 
 * Use **make** to run or build for your current processor architecture - i.e. X86 or Arm.
 
-Note that Arm/MacOS builds are untested by be but assume to work.
+Note that Arm/MacOS builds are untested by me but assumed to work.
 
 #### Tested environment
 
@@ -25,4 +25,5 @@ Examples of various clients using WebSockets to connect are provided.
 
 While the examples provided should work, they do not feature any security provision.
 This should be the responsibility of the proxy environment.
-Client apps running on the same host as the server app could use ws://127.1/ to connect.
+Client apps running on the same host as the server app could use ws://127.1:8080/ to connect.
+Native NATS is run on port 5050.
