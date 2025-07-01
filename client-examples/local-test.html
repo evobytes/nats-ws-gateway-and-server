@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>WebSocket Chat Demo</title>
+  </head>
+  <body>
+    <h2>Chat</h2>
+    <textarea id="log" cols="80" rows="10" readonly></textarea><br>
+    <input type="text" id="msg" value=hello placeholder="Type message..."
+      autofocus />
+    <button class=send>Send</button>
+
+    <script type=module>
+
+class wsClient {
+  /**
+   * @param {string} url - WebSocket URL to connect to
+   * @param {HTMLTextAreaElement} logEl - Element to append log messages to
+   * @param {object} options - Optional settings
+   * @param {number} options.reconnectDelay - ms between reconnect attempts
+   */
+  constructor(url, logEl, { reconnectDelay = 1000 } = {}) {
+    this.url = url;
+    this.logEl = logEl;
+    this.reconnectDelay = reconnectDelay;
+
+    this._connect();
+  }
+
+  _connect() {
+    this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      this._log(`[system] Connected to ${this.url}`);
+    };
+
+    this.ws.onmessage = event => {
+      try {
+        const { type, data } = JSON.parse(event.data);
+        this._log(`<[${type}] ${JSON.stringify(data)}`);
+      } catch (e) {
+        this._log("[error] Failed to parse incoming message");
+        console.error(e);
+      }
+    };
+
+    this.ws.onerror = err => {
+      this._log("[error] WebSocket error");
+      console.error(err);
+    };
+
+    this.ws.onclose = () => {
+      const reason = event.reason || "No reason given";
+      this._log(`[system] Disconnected (code ${event.code}): ${reason}. Reconnecting in ${this.reconnectDelay}ms...`);
+      setTimeout(() => this._connect(), this.reconnectDelay);
+    };
+  }
+
+  get isReady() {
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  _log(msg) {
+    if (this.logEl) {
+      this.logEl.value += msg + "\n";
+      this.logEl.scrollTop = this.logEl.scrollHeight;
+    }
+  }
+
+  send(type, data) {
+    const message = JSON.stringify({ type, data });
+    if (this.isReady) {
+      this.ws.send(message);
+    } else {
+      this._log("[warn] Cannot send, socket not open");
+    }
+  }
+}
+
+const log = document.getElementById("log");
+const url = "ws://127.0.0.1:8080/a-topic/";
+
+window.wsClient = new wsClient(url, log);
+
+document.querySelector('button.send')?.addEventListener('click', e => {
+  const msg = document.querySelector('#msg').value.trim();
+  if (msg.length > 0) {
+    window.wsClient._log(`>"${msg}"`);
+    window.wsClient.send('a.type', {
+      t: new Date().getTime(),
+      msg,
+    });
+  }
+});
+
+</script>
+  </body>
+</html>
