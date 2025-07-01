@@ -19,7 +19,6 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// log.Printf("🔍 WS Origin: %q", r.Header.Get("Origin"))
 		return true // 🚨 ALLOW ALL ORIGINS - safe for dev only
 	},
 }
@@ -36,7 +35,7 @@ func (cl *customLogger) Warnf(f string, a ...interface{}) {
 
 func (cl *customLogger) Fatalf(f string, a ...interface{}) {
 	slog.Error(fmt.Sprintf(f, a...), "component", "nats", "fatal", true)
-	os.Exit(1) // Required: slog.Error doesn’t exit
+	os.Exit(1)
 }
 
 func (cl *customLogger) Errorf(f string, a ...interface{}) {
@@ -80,7 +79,6 @@ func main() {
 		os.Exit(1)
 	}
 	ns.SetLoggerV2(&customLogger{}, true, false, false)
-	// ns.SetLoggerV2(&customLogger{log.New(os.Stdout, "nats-server: ", log.LstdFlags)}, true, false, false)
 
 	// Start the embedded NATS server in a goroutine
 	go func() {
