@@ -43,6 +43,10 @@ func (cl *customLogger) Errorf(f string, a ...interface{}) {
 }
 
 func (cl *customLogger) Debugf(f string, a ...interface{}) {
+	msg := fmt.Sprintf(f, a...)
+	if strings.Contains(msg, "Client Ping Timer") || strings.Contains(msg, "Delaying PING") {
+		return
+	}
 	slog.Debug(fmt.Sprintf(f, a...), "component", "nats")
 }
 
