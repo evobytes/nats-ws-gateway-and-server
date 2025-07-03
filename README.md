@@ -32,3 +32,4 @@ While the examples provided should work, they do not feature any security provis
 This should be the responsibility of the proxy environment.
 Client apps running on the same host as the server app could use ws://127.1:8080/ to connect.
 Native NATS is run on port 5050.
+
