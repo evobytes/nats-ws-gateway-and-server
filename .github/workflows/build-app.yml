@@ -15,7 +15,7 @@ jobs:
       matrix:
         goos: [linux]
         goarch: [amd64, arm64]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,22 +26,20 @@ jobs:
           go-version: '1.24.2'
 
       - name: Build for ${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          export GOOS=${{ matrix.goos }}
-          export GOARCH=${{ matrix.goarch }}
+          mkdir -p bin/${GOARCH}
           make build
+          mv bin/nats-ws-gateway-and-server bin/${GOARCH}/nats-ws-gateway-and-server
 
-      - name: Rename and list built binary
-        run: |
-          mv bin/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
-          ls -l bin
-
-      - name: Upload artifact
+      - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: nats-ws-gateway-and-server-${{ matrix.goarch }}
-          path: bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
-  
+          path: bin/${{ matrix.goarch }}/nats-ws-gateway-and-server
+
   package:
     needs: [build]
     if: startsWith(github.ref, 'refs/tags/')
@@ -53,32 +51,34 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Download compiled binary
         uses: actions/download-artifact@v4
         with:
           name: nats-ws-gateway-and-server-${{ matrix.goarch }}
           path: bin
 
+      - name: Verify binary exists
+        run: test -f bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
+
       - name: Install FPM
         run: |
           sudo apt-get update
           sudo apt-get install -y ruby-dev build-essential
-          sudo gem install fpm
+          sudo gem install --no-document fpm
 
       - name: Create packages for ${{ matrix.goarch }}
         run: |
           VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/v||')
-          echo "Building packages for version: $VERSION"
-          
-          # This section is written to be robust against pathing errors.
+          echo "Packaging version: $VERSION"
+
           STAGING_DIR=./dist
           mkdir -p $STAGING_DIR/usr/bin
-          mkdir -p $STAGING_DIR/lib/systemd/system
+          mkdir -p $STAGING_DIR/usr/lib/systemd/system
           mkdir -p ./.build
 
           cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} $STAGING_DIR/usr/bin/nats-ws-gateway-and-server
-          cp .github/templates/nats-ws-gateway-and-server.service $STAGING_DIR/lib/systemd/system/
+          cp .github/templates/nats-ws-gateway-and-server.service $STAGING_DIR/usr/lib/systemd/system/
           cp .github/templates/postinst.sh ./.build/postinst.sh
 
           fpm \
@@ -88,14 +88,15 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Your Name <your-email@example.com>" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
+            --deb-systemd usr/lib/systemd/system/nats-ws-gateway-and-server.service \
             -C $STAGING_DIR \
             usr/bin/nats-ws-gateway-and-server \
-            lib/systemd/system/nats-ws-gateway-and-server.service
-          
+            usr/lib/systemd/system/nats-ws-gateway-and-server.service
+
           fpm \
             -s dir \
             -t rpm \
@@ -103,16 +104,17 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Your Name <your-email@example.com>" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
+            --rpm-systemd usr/lib/systemd/system/nats-ws-gateway-and-server.service \
             -C $STAGING_DIR \
             usr/bin/nats-ws-gateway-and-server \
-            lib/systemd/system/nats-ws-gateway-and-server.service
-      
+            usr/lib/systemd/system/nats-ws-gateway-and-server.service
+
       - name: List generated packages
-        run: ls -l
+        run: ls -lh *.deb *.rpm
 
       - name: Upload .deb and .rpm artifacts
         uses: actions/upload-artifact@v4
