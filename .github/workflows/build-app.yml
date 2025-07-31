@@ -102,11 +102,11 @@ jobs:
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/${{ github.repository }}" \
+            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            --deb-systemd $STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service \
-            -C $STAGING_DIR \
+            --deb-systemd "$STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service" \
+            -C "$STAGING_DIR" \
             usr/bin/nats-ws-gateway-and-server \
             usr/lib/systemd/system/nats-ws-gateway-and-server.service
 
@@ -118,11 +118,10 @@ jobs:
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/${{ github.repository }}" \
+            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            --rpm-systemd $STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service \
-            -C $STAGING_DIR \
+            -C "$STAGING_DIR" \
             usr/bin/nats-ws-gateway-and-server \
             usr/lib/systemd/system/nats-ws-gateway-and-server.service
 
