@@ -105,8 +105,8 @@ jobs:
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            --deb-systemd usr/lib/systemd/system/nats-ws-gateway-and-server.service \
-            -C "$STAGING_DIR" \
+            --deb-systemd $STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service \
+            -C $STAGING_DIR \
             usr/bin/nats-ws-gateway-and-server \
             usr/lib/systemd/system/nats-ws-gateway-and-server.service
 
@@ -121,7 +121,7 @@ jobs:
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            --rpm-systemd usr/lib/systemd/system/nats-ws-gateway-and-server.service \
+            --rpm-systemd $STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service \
             -C $STAGING_DIR \
             usr/bin/nats-ws-gateway-and-server \
             usr/lib/systemd/system/nats-ws-gateway-and-server.service
