@@ -58,8 +58,10 @@ jobs:
           name: nats-ws-gateway-and-server-${{ matrix.goarch }}
           path: bin
 
-      - name: Verify binary exists
-        run: test -f bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
+      - name: Move and verify binary
+        run: |
+          mv bin/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
+          test -f bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
 
       - name: Install FPM
         run: |
