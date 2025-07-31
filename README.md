@@ -1,3 +1,5 @@
+[![Build and Release](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-app.yml/badge.svg)](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-app.yml)
+
 ## nats-ws-gateway-and-server
 
 An all-in-one NATS.io server c/w a WebSocket http server.
