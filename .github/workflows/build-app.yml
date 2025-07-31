@@ -92,7 +92,7 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Your Name <your-email@example.com>" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --deb-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
@@ -106,7 +106,7 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Your Name <your-email@example.com>" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --rpm-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
