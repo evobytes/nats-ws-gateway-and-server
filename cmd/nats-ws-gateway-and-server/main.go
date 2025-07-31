@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,6 +23,8 @@ var upgrader = websocket.Upgrader{
 		return true // 🚨 ALLOW ALL ORIGINS - safe for dev only
 	},
 }
+
+var topicValidator = regexp.MustCompile(`^[a-z0-9._-]+$`)
 
 type customLogger struct{}
 
@@ -116,56 +119,28 @@ func main() {
 		if topic == "" {
 			topic = "default"
 		}
-		if !regexp.MustCompile(`^[a-z0-9._-]+$`).MatchString(topic) {
+		if !topicValidator.MatchString(topic) {
 			http.Error(w, "Invalid topic", http.StatusBadRequest)
 			return
 		}
-		slog.Info("🔌 Client connected", "client", r.RemoteAddr, "topic", topic)
 
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			slog.Warn("❌ WebSocket upgrade error", "err", err)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			// Handle WebSocket upgrade
+			handleWebSocket(w, r, topic, nc)
+		case http.MethodPost:
+			// Handle HTTP POST request
+			handleHttpPost(w, r, topic, nc)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-		slog.Info("🔌 WebSocket connected", "client", r.RemoteAddr, "topic", topic)
-
-		sub, err := nc.Subscribe(topic, func(m *nats.Msg) {
-			err := conn.WriteMessage(websocket.TextMessage, m.Data)
-			if err != nil {
-				slog.Warn("❌ Write to WS failed", "err", err)
-			}
-		})
-		if err != nil {
-			slog.Warn("❌ NATS subscribe failed", "err", err)
-			conn.Close()
-			return
-		}
-		slog.Info("✅ Subscribed", "client", r.RemoteAddr, "topic", topic)
-
-		defer sub.Unsubscribe()
-		defer conn.Close()
-
-		// Read WebSocket → publish to NATS
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				slog.Info("⚠️ WS read closed", "client", r.RemoteAddr, "err", err)
-				break
-			}
-			slog.Info("📤 WS → NATS", "client", r.RemoteAddr, "topic", topic, "msg", msg)
-
-			if err := nc.Publish(topic, msg); err != nil {
-				slog.Warn("❌ NATS publish failed", "err", err)
-			}
-		}
-		slog.Info("🔌 WebSocket disconnected", "client", r.RemoteAddr)
 	})
 
 	server := &http.Server{Addr: ":8080"}
 
 	// Start HTTP server
 	go func() {
-		slog.Info("🌐 WebSocket server on :8080")
+		slog.Info("🌐 Server on :8080")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("❌ HTTP server error", "err", err)
 			os.Exit(1)
@@ -187,4 +162,89 @@ func main() {
 	nc.Drain()
 	ns.Shutdown()
 	slog.Info("✅ Exit complete")
+}
+
+// handleWebSocket manages the WebSocket connection logic
+func handleWebSocket(w http.ResponseWriter, r *http.Request, topic string, nc *nats.Conn) {
+	slog.Info("🔌 Client attempting WebSocket connection", "client", r.RemoteAddr, "topic", topic)
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		slog.Warn("❌ WebSocket upgrade error", "err", err)
+		return
+	}
+	slog.Info("🔌 WebSocket connected", "client", r.RemoteAddr, "topic", topic)
+
+	// Subscribe to NATS for messages to send to the WebSocket client
+	sub, err := nc.Subscribe(topic, func(m *nats.Msg) {
+		err := conn.WriteMessage(websocket.TextMessage, m.Data)
+		if err != nil {
+			slog.Warn("❌ Write to WS failed", "err", err, "client", r.RemoteAddr)
+		}
+	})
+	if err != nil {
+		slog.Warn("❌ NATS subscribe failed", "err", err)
+		conn.Close()
+		return
+	}
+	slog.Info("✅ Subscribed", "client", r.RemoteAddr, "topic", topic)
+
+	defer sub.Unsubscribe()
+	defer conn.Close()
+
+	// Read WebSocket → publish to NATS
+	for {
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			slog.Info("⚠️ WS read closed", "client", r.RemoteAddr, "err", err)
+			break
+		}
+
+		// --- AUGMENTATION START ---
+		// Ignore "ping" messages from the client
+		if string(msg) == "ping" {
+			continue
+		}
+		// --- AUGMENTATION END ---
+
+		slog.Info("📤 WS → NATS", "client", r.RemoteAddr, "topic", topic, "msg", string(msg))
+
+		if err := nc.Publish(topic, msg); err != nil {
+			slog.Warn("❌ NATS publish failed", "err", err)
+		}
+	}
+	slog.Info("🔌 WebSocket disconnected", "client", r.RemoteAddr)
+}
+
+// handleHttpPost manages the HTTP POST request logic
+func handleHttpPost(w http.ResponseWriter, r *http.Request, topic string, nc *nats.Conn) {
+	slog.Info("📥 HTTP POST received", "client", r.RemoteAddr, "topic", topic)
+
+	// Read the entire body of the request
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		slog.Warn("❌ Failed to read request body", "err", err)
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+
+	// Check if the body is empty
+	if len(body) == 0 {
+		http.Error(w, "Empty body", http.StatusBadRequest)
+		return
+	}
+
+	slog.Info("📤 HTTP POST → NATS", "topic", topic, "msg_size", len(body))
+
+	// Publish the body content to NATS
+	if err := nc.Publish(topic, body); err != nil {
+		slog.Warn("❌ NATS publish failed for HTTP POST", "err", err)
+		http.Error(w, "Failed to publish message to NATS", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Message published to NATS topic: " + topic))
+	slog.Info("✅ HTTP POST handled successfully", "client", r.RemoteAddr, "topic", topic)
 }
