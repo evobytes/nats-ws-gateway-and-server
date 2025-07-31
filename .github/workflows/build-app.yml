@@ -79,6 +79,14 @@ jobs:
           mkdir -p $STAGING_DIR/usr/lib/systemd/system
           mkdir -p ./.build
 
+          echo "::group::Verifying presence of systemd service file"
+          ls -l .github/templates/
+          cat .github/templates/nats-ws-gateway-and-server.service || {
+            echo "::error::Missing or unreadable .github/templates/nats-ws-gateway-and-server.service"
+            exit 1
+          }
+          echo "::endgroup::"
+
           cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} $STAGING_DIR/usr/bin/nats-ws-gateway-and-server
           cp .github/templates/nats-ws-gateway-and-server.service $STAGING_DIR/usr/lib/systemd/system/
           cp .github/templates/postinst.sh ./.build/postinst.sh
