@@ -70,11 +70,20 @@ jobs:
         run: |
           VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/v||')
           echo "Building packages for version: $VERSION"
+          
+          # --- This section is now different ---
+          # 1. Create a staging directory where all files will be placed in their final locations.
+          STAGING_DIR=./dist
+          mkdir -p $STAGING_DIR/usr/bin
+          mkdir -p $STAGING_DIR/lib/systemd/system
 
-          mkdir -p ./.build/systemd
-          cp .github/templates/nats-ws-gateway-and-server.service ./.build/systemd/
+          # 2. Copy the binary and systemd files to their correct paths within the staging directory.
+          cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} $STAGING_DIR/usr/bin/nats-ws-gateway-and-server
+          cp .github/templates/nats-ws-gateway-and-server.service $STAGING_DIR/lib/systemd/system/
           cp .github/templates/postinst.sh ./.build/postinst.sh
 
+          # 3. Use FPM with the -C flag to change the source directory.
+          #    This tells FPM to look for files *inside* the 'dist' directory.
           fpm \
             -s dir \
             -t deb \
@@ -85,13 +94,10 @@ jobs:
             --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --deb-systemd ./.build/systemd/nats-ws-gateway-and-server.service \
-            --deb-user nats \
-            --deb-group nats \
+            --deb-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
             --after-install ./.build/postinst.sh \
-            bin/nats-ws-gateway-and-server-${{ matrix.goarch }}=/usr/bin/nats-ws-gateway-and-server \
-            ./.build/systemd/nats-ws-gateway-and-server.service=/lib/systemd/system/nats-ws-gateway-and-server.service
-
+            -C $STAGING_DIR
+          
           fpm \
             -s dir \
             -t rpm \
@@ -102,12 +108,9 @@ jobs:
             --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --rpm-systemd ./.build/systemd/nats-ws-gateway-and-server.service \
-            --rpm-user nats \
-            --rpm-group nats \
+            --rpm-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
             --after-install ./.build/postinst.sh \
-            bin/nats-ws-gateway-and-server-${{ matrix.goarch }}=/usr/bin/nats-ws-gateway-and-server \
-            ./.build/systemd/nats-ws-gateway-and-server.service=/lib/systemd/system/nats-ws-gateway-and-server.service
+            -C $STAGING_DIR
       
       - name: List generated packages
         run: ls -l
