@@ -71,20 +71,16 @@ jobs:
           VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/v||')
           echo "Building packages for version: $VERSION"
           
-          # --- This section is now different ---
-          # 1. Create a staging directory where all files will be placed in their final locations.
+          # This section is written to be robust against pathing errors.
           STAGING_DIR=./dist
           mkdir -p $STAGING_DIR/usr/bin
           mkdir -p $STAGING_DIR/lib/systemd/system
-          mkdir -p ./.build # <- ADDED THIS LINE
+          mkdir -p ./.build
 
-          # 2. Copy the binary and systemd files to their correct paths within the staging directory.
           cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} $STAGING_DIR/usr/bin/nats-ws-gateway-and-server
           cp .github/templates/nats-ws-gateway-and-server.service $STAGING_DIR/lib/systemd/system/
           cp .github/templates/postinst.sh ./.build/postinst.sh
 
-          # 3. Use FPM with the -C flag to change the source directory.
-          #    This tells FPM to look for files *inside* the 'dist' directory.
           fpm \
             -s dir \
             -t deb \
@@ -92,12 +88,14 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --deb-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
             --after-install ./.build/postinst.sh \
-            -C $STAGING_DIR
+            --deb-systemd nats-ws-gateway-and-server.service \
+            -C $STAGING_DIR \
+            usr/bin/nats-ws-gateway-and-server \
+            lib/systemd/system/nats-ws-gateway-and-server.service
           
           fpm \
             -s dir \
@@ -106,12 +104,14 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --rpm-systemd lib/systemd/system/nats-ws-gateway-and-server.service \
             --after-install ./.build/postinst.sh \
-            -C $STAGING_DIR
+            --rpm-systemd nats-ws-gateway-and-server.service \
+            -C $STAGING_DIR \
+            usr/bin/nats-ws-gateway-and-server \
+            lib/systemd/system/nats-ws-gateway-and-server.service
       
       - name: List generated packages
         run: ls -l
