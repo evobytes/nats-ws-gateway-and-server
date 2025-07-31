@@ -76,6 +76,7 @@ jobs:
           STAGING_DIR=./dist
           mkdir -p $STAGING_DIR/usr/bin
           mkdir -p $STAGING_DIR/lib/systemd/system
+          mkdir -p ./.build # <- ADDED THIS LINE
 
           # 2. Copy the binary and systemd files to their correct paths within the staging directory.
           cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} $STAGING_DIR/usr/bin/nats-ws-gateway-and-server
