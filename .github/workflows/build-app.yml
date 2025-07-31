@@ -85,7 +85,7 @@ jobs:
             --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --deb-systemd systemd/nats-ws-gateway-and-server.service \
+            --deb-systemd ./.build/systemd/nats-ws-gateway-and-server.service \
             --deb-user nats \
             --deb-group nats \
             --after-install ./.build/postinst.sh \
@@ -102,7 +102,7 @@ jobs:
             --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
-            --rpm-systemd systemd/nats-ws-gateway-and-server.service \
+            --rpm-systemd ./.build/systemd/nats-ws-gateway-and-server.service \
             --rpm-user nats \
             --rpm-group nats \
             --after-install ./.build/postinst.sh \
