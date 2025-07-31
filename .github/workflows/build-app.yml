@@ -63,7 +63,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ruby-dev build-essential
-          gem install fpm
+          # Add 'sudo' to run the gem installation with elevated permissions
+          sudo gem install fpm
 
       - name: Create packages for ${{ matrix.goarch }}
         run: |
@@ -81,7 +82,7 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --deb-systemd systemd/nats-ws-gateway-and-server.service \
@@ -98,7 +99,7 @@ jobs:
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
-            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --maintainer "Your Name <your-email@example.com>" \
             --url "https://github.com/${{ github.repository }}" \
             --license "MIT" \
             --rpm-systemd systemd/nats-ws-gateway-and-server.service \
@@ -118,7 +119,7 @@ jobs:
           path: |
             *.deb
             *.rpm
-
+            
   release:
     needs: [package]
     if: startsWith(github.ref, 'refs/tags/')
