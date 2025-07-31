@@ -1,0 +1,15 @@
+[Unit]
+Description=NATS WebSocket Gateway and Server
+After=network.target
+
+[Service]
+Type=simple
+User=nats
+Group=nats
+WorkingDirectory=/usr/local/bin
+ExecStart=/usr/bin/nats-ws-gateway-and-server
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
