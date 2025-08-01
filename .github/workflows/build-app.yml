@@ -42,7 +42,7 @@ jobs:
           [[ "$GOOS" == "windows" ]] && SAVEAS=nats-ws-gateway-and-server.exe
           mkdir -p bin/${GOOS}-${GOARCH}
           make build
-          mv bin/nats-ws-gateway-and-server bin/${GOOS}-${GOARCH}/${SAVEAS}
+          mv bin/${SAVEAS} bin/${GOOS}-${GOARCH}/${SAVEAS}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
