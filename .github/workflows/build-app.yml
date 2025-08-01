@@ -108,7 +108,6 @@ jobs:
             --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            --deb-systemd "$STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service" \
             -C "$STAGING_DIR" \
             usr/bin/nats-ws-gateway-and-server \
             usr/lib/systemd/system/nats-ws-gateway-and-server.service
