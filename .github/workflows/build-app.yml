@@ -10,14 +10,19 @@ on:
 
 permissions:
   contents: write
-  
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        goos: [linux]
-        goarch: [amd64, arm64]
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
 
     steps:
       - name: Checkout code
@@ -28,20 +33,22 @@ jobs:
         with:
           go-version: '1.24.2'
 
-      - name: Build for ${{ matrix.goarch }}
+      - name: Build for ${{ matrix.goos }}-${{ matrix.goarch }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          mkdir -p bin/${GOARCH}
+          SAVEAS=nats-ws-gateway-and-server
+          [[ "$GOOS" == "windows" ]] && SAVEAS=nats-ws-gateway-and-server.exe
+          mkdir -p bin/${GOOS}-${GOARCH}
           make build
-          mv bin/nats-ws-gateway-and-server bin/${GOARCH}/nats-ws-gateway-and-server
+          mv bin/nats-ws-gateway-and-server bin/${GOOS}-${GOARCH}/${SAVEAS}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nats-ws-gateway-and-server-${{ matrix.goarch }}
-          path: bin/${{ matrix.goarch }}/nats-ws-gateway-and-server
+          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server*
+          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
   package:
     needs: [build]
@@ -49,7 +56,11 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        goarch: [amd64, arm64]
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
 
     steps:
       - name: Checkout code
@@ -72,7 +83,7 @@ jobs:
           sudo apt-get install -y ruby-dev build-essential
           sudo gem install --no-document fpm
 
-      - name: Create packages for ${{ matrix.goarch }}
+      - name: Create Linux packages for ${{ matrix.goarch }}
         run: |
           VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/v||')
           echo "Packaging version: $VERSION"
@@ -158,3 +169,22 @@ jobs:
             artifacts/nats-ws-gateway-and-server-packages-arm64/*.rpm
           body: |
             Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
+
+  release-windows:
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: nats-ws-gateway-and-server-windows-amd64
+          path: bin
+
+      - name: Create GitHub Release with Windows binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/nats-ws-gateway-and-server.exe
+          body: |
+            Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
+
