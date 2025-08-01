@@ -1,30 +1,326 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <title>WebSocket Chat Demo</title>
-</head>
-<body>
-  <h2>Chat</h2>
-  <textarea id="log" cols="80" rows="10" readonly></textarea><br>
-  <input type="text" id="msg" placeholder="Type message..." autofocus />
-  <button onclick="sendMsg()">Send</button>
-
-  <script>
-    const log = document.getElementById("log");
-    const ws = new WebSocket("wss://myserver.domain/hive-ws/");
-
-    ws.onmessage = event => {
-      const { type, data } = JSON.parse(event.data);
-      log.value += `[${type}] ${data}\n`;
-    };
-
-    function sendMsg() {
-      const text = document.getElementById("msg").value;
-      ws.send(JSON.stringify({ type: "chat", data: text }));
-      document.getElementById("msg").value = "";
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket/Webhook Tester</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 20px;
+      background-color: #f4f4f9;
     }
+
+    .container {
+      display: flex;
+      gap: 20px;
+    }
+
+    .panel {
+      flex: 1;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 10px;
+      box-sizing: border-box;
+      resize: vertical;
+      background-color: #f9f9f9;
+    }
+
+    input,
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    button {
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .status {
+      font-weight: bold;
+    }
+
+    .status.connected {
+      color: green;
+    }
+
+    .status.disconnected {
+      color: red;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>NATS WebSocket/Webhook Tester</h1>
+  <p>Replace <code>&lt;dns&gt;</code> and <code>my-topic</code> with your server details below.</p>
+
+  <div class="container">
+    <div class="panel">
+      <h2>WebSocket Listener</h2>
+      <div style="margin-bottom: 10px;">
+        WebSocket URL: <input id="ws-url" type="text" value="/nats/my-topic">
+      </div>
+      <p>Status: <span id="ws-status" class="status disconnected">Disconnected</span></p>
+      <div style="display: flex; gap: 10px;">
+        <button id="ws-connect-btn">Connect</button>
+        <button id="ws-simulate-failure-btn" disabled>Simulate network failure</button>
+      </div>
+      <textarea id="ws-log" readonly></textarea>
+    </div>
+
+    <div class="panel">
+      <h2>Webhook POST Sender</h2>
+      <div style="margin-bottom: 10px;">
+        POST URL: <input id="post-url" type="text" value="/nats/my-topic">
+      </div>
+      <div>
+        JSON Payload:
+        <textarea id="post-payload">{"message":"Hello from webhook!", "timestamp": ""}</textarea>
+      </div>
+      <button id="post-btn">Send POST</button>
+      <textarea id="post-log" readonly></textarea>
+    </div>
+  </div>
+
+  <script type="module">
+    // Self-contained ES Module class for the entire application
+    class NatsTester {
+      constructor() {
+        // DOM elements
+        this.wsUrlInput = document.getElementById('ws-url');
+        this.wsStatusSpan = document.getElementById('ws-status');
+        // CORRECTED: The button IDs are now correct.
+        this.wsConnectBtn = document.getElementById('ws-connect-btn');
+        this.wsSimulateFailureBtn = document.getElementById('ws-simulate-failure-btn');
+        this.wsLogTextarea = document.getElementById('ws-log');
+
+        this.postUrlInput = document.getElementById('post-url');
+        this.postPayloadTextarea = document.getElementById('post-payload');
+        this.postBtn = document.getElementById('post-btn');
+        this.postLogTextarea = document.getElementById('post-log');
+
+        // WebSocket related properties
+        this.ws = null;
+        this.reconnectTimeout = null;
+        this.isConnecting = false;
+        this.isExplicitlyClosed = false;
+        this.pingInterval = null;
+
+        // Event listeners
+        this.wsConnectBtn.addEventListener('click', () => this.toggleWsConnection());
+        this.wsSimulateFailureBtn.addEventListener('click', () => this.simulateNetworkFailure());
+        this.postBtn.addEventListener('click', () => this.sendPostRequest());
+
+        this.pingDelay = 10;
+      }
+
+      // WebSocket Methods
+      toggleWsConnection() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.isExplicitlyClosed = true;
+          this.ws.close(1000, "User manually closed the connection.");
+          this.logWs('WebSocket connection manually closed.');
+        } else {
+          this.isExplicitlyClosed = false;
+          this.connectWs();
+        }
+      }
+
+      simulateNetworkFailure() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.isExplicitlyClosed = false;
+          this.logWs('Simulating network failure by closing the connection...');
+          this.ws.close(1006, 'Simulated network failure');
+        }
+      }
+
+      connectWs() {
+        if (this.isConnecting || (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN))) {
+          return;
+        }
+
+        // CORRECTED: Logic to handle relative URLs
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const url = this.wsUrlInput.value.startsWith('/') ? `${protocol}//${host}${this.wsUrlInput.value}` : this.wsUrlInput.value;
+
+        this.logWs(`Attempting to connect to ${url}...`);
+        this.updateWsStatus('Connecting');
+        this.isConnecting = true;
+
+        this.ws = new WebSocket(url);
+        this.ws.onopen = (event) => this.handleWsOpen(event);
+        this.ws.onmessage = (event) => this.handleWsMessage(event);
+        this.ws.onclose = (event) => this.handleWsClose(event);
+        this.ws.onerror = (event) => this.handleWsError(event);
+      }
+
+      handleWsOpen(event) {
+        this.isConnecting = false;
+        this.logWs('WebSocket connection established.');
+        this.updateWsStatus('Connected');
+        this.wsConnectBtn.textContent = 'Disconnect';
+        this.wsSimulateFailureBtn.disabled = false;
+        if (this.reconnectTimeout) {
+          clearTimeout(this.reconnectTimeout);
+        }
+        this.startPing();
+      }
+
+      handleWsMessage(event) {
+        const timestamp = this.getTimestamp();
+        this.logWs(`[${timestamp}] Received: ${event.data}`);
+      }
+
+      handleWsClose(event) {
+        this.isConnecting = false;
+        this.wsSimulateFailureBtn.disabled = true;
+        this.stopPing();
+
+        if (event.wasClean) {
+          this.logWs(`WebSocket connection closed cleanly. Code: ${event.code}, Reason: ${event.reason}`);
+        } else {
+          this.logWs(`WebSocket connection unexpectedly closed. Code: ${event.code}`);
+        }
+
+        this.updateWsStatus('Disconnected');
+        this.wsConnectBtn.textContent = 'Connect';
+
+        if (!this.isExplicitlyClosed) {
+          this.logWs('Attempting to reconnect in 5 seconds...');
+          this.reconnectTimeout = setTimeout(() => this.connectWs(), 5000);
+        }
+      }
+
+      handleWsError(event) {
+        this.logWs('WebSocket error occurred. See console for details.');
+        console.error('WebSocket Error:', event);
+      }
+
+      updateWsStatus(status) {
+        this.wsStatusSpan.textContent = status;
+        if (status === 'Connected') {
+          this.wsStatusSpan.className = 'status connected';
+        } else if (status === 'Disconnected') {
+          this.wsStatusSpan.className = 'status disconnected';
+        } else {
+          this.wsStatusSpan.className = 'status';
+        }
+      }
+
+      logWs(message) {
+        this.wsLogTextarea.value += message + '\n';
+        this.wsLogTextarea.scrollTop = this.wsLogTextarea.scrollHeight;
+      }
+
+      startPing() {
+        this.stopPing();
+        const pingIntervalMs = this.pingDelay * 1000;
+        this.logWs(`Starting periodic ping every ${pingIntervalMs / 1000}s...`);
+        this.pingInterval = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send('ping');
+          }
+        }, pingIntervalMs);
+      }
+
+      stopPing() {
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+          this.logWs('Stopped periodic ping.');
+        }
+      }
+
+      // Webhook POST Methods
+      async sendPostRequest() {
+        // CORRECTED: Logic to handle relative URLs
+        const protocol = window.location.protocol;
+        const host = window.location.host;
+        const url = this.postUrlInput.value.startsWith('/') ? `${protocol}//${host}${this.postUrlInput.value}` : this.postUrlInput.value;
+
+        let payload = this.postPayloadTextarea.value;
+
+        try {
+          if (payload.startsWith('{') && payload.endsWith('}')) {
+            const jsonPayload = JSON.parse(payload);
+            if (typeof jsonPayload.timestamp !== 'undefined') {
+              jsonPayload.timestamp = this.getTimestamp();
+              payload = JSON.stringify(jsonPayload, null, 2);
+              this.postPayloadTextarea.value = payload;
+            }
+          }
+        } catch (e) {
+          this.logPost('Warning: Could not parse JSON payload to update timestamp.');
+        }
+
+        const timestamp = this.getTimestamp();
+        this.logPost(`[${timestamp}] Sending POST to ${url}...`);
+
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: payload
+          });
+
+          const responseText = await response.text();
+          const status = response.ok ? 'Success' : 'Error';
+          this.logPost(`[${this.getTimestamp()}] Response: ${status} (${response.status} ${response.statusText})`);
+          this.logPost(`Response Body: ${responseText}`);
+        } catch (error) {
+          this.logPost(`[${this.getTimestamp()}] Fetch error: ${error.message}`);
+        }
+      }
+
+      logPost(message) {
+        this.postLogTextarea.value += message + '\n';
+        this.postLogTextarea.scrollTop = this.postLogTextarea.scrollHeight;
+      }
+
+      // Utility
+      getTimestamp() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+        return `${hours}:${minutes}:${seconds}.${milliseconds}`;
+      }
+    }
+
+    // Initialize the app
+    document.addEventListener('DOMContentLoaded', () => {
+      new NatsTester();
+    });
   </script>
 </body>
-</html>
 
+</html>
