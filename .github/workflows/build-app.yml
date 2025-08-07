@@ -14,8 +14,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    env:
-      APP: nats-ws-gateway-and-server
     strategy:
       matrix:
         include:
@@ -45,8 +43,8 @@ jobs:
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ env.APP }}*
-          name: ${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server*
+          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
   package:
     needs: [build]
@@ -67,13 +65,13 @@ jobs:
       - name: Download compiled binary
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
           path: .
 
       - name: Move and verify binary
         run: |
-          mv ${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ env.APP }} bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          test -f bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          mv nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          test -f bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Install FPM
         run: |
@@ -93,15 +91,15 @@ jobs:
 
           echo "::group::Verifying presence of systemd service file"
           ls -l .github/templates/
-          cat .github/templates/${{ env.APP }}.service || {
+          cat .github/templates/nats-ws-gateway-and-server.service || {
             echo "::error::Missing or unreadable service file"
             exit 1
           }
           echo "::endgroup::"
 
           echo "::group::Copying files to staging area"
-          cp bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }} "$STAGING_DIR/usr/bin/${{ env.APP }}"
-          cp .github/templates/${{ env.APP }}.service "$STAGING_DIR/usr/lib/systemd/system/${{ env.APP }}.service"
+          cp bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }} "$STAGING_DIR/usr/bin/nats-ws-gateway-and-server"
+          cp .github/templates/nats-ws-gateway-and-server.service "$STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service"
           cp .github/templates/postinst.sh ./.build/postinst.sh
           find "$STAGING_DIR" -type f
           echo "::endgroup::"
@@ -109,32 +107,32 @@ jobs:
           fpm \
             -s dir \
             -t deb \
-            --name ${{ env.APP }} \
+            --name nats-ws-gateway-and-server \
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/evobytes/${{ env.APP }}" \
+            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
             -C "$STAGING_DIR" \
-            usr/bin/${{ env.APP }} \
-            usr/lib/systemd/system/${{ env.APP }}.service
+            usr/bin/nats-ws-gateway-and-server \
+            usr/lib/systemd/system/nats-ws-gateway-and-server.service
 
           fpm \
             -s dir \
             -t rpm \
-            --name ${{ env.APP }} \
+            --name nats-ws-gateway-and-server \
             --version "$VERSION" \
             --architecture ${{ matrix.goarch }} \
             --description "NATS.io WebSocket Gateway and Embedded Server" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/evobytes/${{ env.APP }}" \
+            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
             -C "$STAGING_DIR" \
-            usr/bin/${{ env.APP }} \
-            usr/lib/systemd/system/${{ env.APP }}.service
+            usr/bin/nats-ws-gateway-and-server \
+            usr/lib/systemd/system/nats-ws-gateway-and-server.service
 
       - name: List generated packages
         run: ls -lh *.deb *.rpm
@@ -142,7 +140,7 @@ jobs:
       - name: Upload .deb and .rpm artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.APP }}-packages-${{ matrix.goarch }}
+          name: nats-ws-gateway-and-server-packages-${{ matrix.goarch }}
           path: |
             *.deb
             *.rpm
@@ -160,7 +158,7 @@ jobs:
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.APP }}-windows-amd64
+          name: nats-ws-gateway-and-server-windows-amd64
           path: artifacts/binaries/windows-amd64
 
       - name: Create GitHub Release
@@ -171,5 +169,5 @@ jobs:
             artifacts/packages/**/*.rpm
             artifacts/binaries/windows-amd64/**/*.exe
           body: |
-            Automated release of ${{ env.APP }} packages for version ${{ github.ref_name }}.
+            Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
 
