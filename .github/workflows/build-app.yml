@@ -72,7 +72,7 @@ jobs:
 
       - name: Move and verify binary
         run: |
-          mv ${{ env.APP }}-${{ matix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ env.APP }} bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          mv ${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ env.APP }} bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
           test -f bin/${{ env.APP }}-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Install FPM
