@@ -69,8 +69,8 @@ jobs:
           path: ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: List downloaded files
-          run: |
-            find ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }} -type f
+        run: |
+          find ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }} -type f
 
       - name: Move and verify binary
         run: |
