@@ -38,11 +38,7 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          SAVEAS=nats-ws-gateway-and-server
-          [[ "$GOOS" == "windows" ]] && SAVEAS=nats-ws-gateway-and-server.exe
-          mkdir -p bin/${GOOS}-${GOARCH}
           make build
-          mv bin/${SAVEAS} bin/${GOOS}-${GOARCH}/${SAVEAS}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -69,13 +65,13 @@ jobs:
       - name: Download compiled binary
         uses: actions/download-artifact@v4
         with:
-          name: nats-ws-gateway-and-server-${{ matrix.goarch }}
-          path: bin
+          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: .
 
       - name: Move and verify binary
         run: |
-          mv bin/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
-          test -f bin/nats-ws-gateway-and-server-${{ matrix.goarch }}
+          mv nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          test -f bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Install FPM
         run: |
@@ -102,7 +98,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Copying files to staging area"
-          cp bin/nats-ws-gateway-and-server-${{ matrix.goarch }} "$STAGING_DIR/usr/bin/nats-ws-gateway-and-server"
+          cp bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }} "$STAGING_DIR/usr/bin/nats-ws-gateway-and-server"
           cp .github/templates/nats-ws-gateway-and-server.service "$STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service"
           cp .github/templates/postinst.sh ./.build/postinst.sh
           find "$STAGING_DIR" -type f
@@ -150,41 +146,28 @@ jobs:
             *.rpm
 
   release:
-    needs: [package]
+    needs: [build, package]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     steps:
-      - name: Download all packages
+      - name: Download all packages (amd64, arm64)
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: artifacts/packages
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: nats-ws-gateway-and-server-windows-amd64
+          path: artifacts/binaries/windows-amd64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/nats-ws-gateway-and-server-packages-amd64/*.deb
-            artifacts/nats-ws-gateway-and-server-packages-amd64/*.rpm
-            artifacts/nats-ws-gateway-and-server-packages-arm64/*.deb
-            artifacts/nats-ws-gateway-and-server-packages-arm64/*.rpm
-          body: |
-            Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
-
-  release-windows:
-    needs: [build]
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Download Windows binary
-        uses: actions/download-artifact@v4
-        with:
-          name: nats-ws-gateway-and-server-windows-amd64
-          path: bin
-
-      - name: Create GitHub Release with Windows binary
-        uses: softprops/action-gh-release@v2
-        with:
-          files: bin/nats-ws-gateway-and-server.exe
+            artifacts/packages/**/*.deb
+            artifacts/packages/**/*.rpm
+            artifacts/binaries/windows-amd64/**/*.exe
           body: |
             Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
 
