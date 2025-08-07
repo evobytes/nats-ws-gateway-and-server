@@ -18,6 +18,8 @@ if ! getent passwd nats > /dev/null; then
         nats
 fi
 
+chmod a+x /usr/bin/nats-ws-gateway-and-server || true
+
 # Reload systemd, enable, and start the service
 # The service file is installed by the package, but systemd needs to be
 # reloaded to see the new unit file.
