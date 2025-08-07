@@ -70,7 +70,7 @@ jobs:
 
       - name: Move and verify binary
         run: |
-          mv nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          mv bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
           test -f bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Install FPM
