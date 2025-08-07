@@ -68,6 +68,10 @@ jobs:
           name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}
 
+      - name: List downloaded files
+          run: |
+            find ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }} -type f
+
       - name: Move and verify binary
         run: |
           mv ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}/bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
