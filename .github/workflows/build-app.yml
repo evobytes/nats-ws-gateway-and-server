@@ -74,6 +74,7 @@ jobs:
 
       - name: Move and verify binary
         run: |
+          mkdir -p bin
           mv ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
 
           test -f bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
