@@ -72,7 +72,7 @@ jobs:
 
   # Job 3: Package all Linux commands into .deb and .rpm
   package:
-    needs: [discover-commands]
+    needs: [discover-commands, build]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     strategy:
