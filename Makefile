@@ -20,10 +20,16 @@ fmt:
 
 build: fmt
 	-mkdir -p $(BINDIR)
-	@for cmd in $(CMDS); do \
-		echo "Building $$cmd..."; \
-		go build -C cmd/$$cmd -ldflags "-s -w" -o ../../$(BINDIR)/$$cmd .; \
-	done
+	@if [ -z "$(APP_NAME)" ]; then \
+		echo "Building all commands..."; \
+		for cmd in $(CMDS); do \
+			echo "Building $$cmd..."; \
+			go build -C cmd/$$cmd -ldflags "-s -w" -o ../../$(BINDIR)/$$cmd .; \
+		done \
+	else \
+		echo "Building $(APP_NAME)..."; \
+		go build -C cmd/$(APP_NAME) -ldflags "-s -w" -o ../../$(BINDIR)/$(APP_NAME) .; \
+	fi
 	dir -hl $(BINDIR)
 
 run: fmt
