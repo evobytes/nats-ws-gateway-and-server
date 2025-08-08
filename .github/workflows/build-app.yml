@@ -28,7 +28,10 @@ jobs:
         run: |
           COMMANDS=$(ls -d cmd/*/ | xargs -n 1 basename | jq -R '{"app_name": .}' | jq -s .)
           echo "Discovered commands: $COMMANDS"
-          echo "matrix=$COMMANDS" >> "$GITHUB_OUTPUT"
+          # Fix: Use a multi-line string to set the output variable
+          echo "matrix<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$COMMANDS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
   # Job 2: Build all commands for all target platforms
   build:
