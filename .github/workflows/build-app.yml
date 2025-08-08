@@ -74,9 +74,9 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      # Create a package job for each command on Linux platforms
-      command: ${{ fromJson(needs.discover-commands.outputs.matrix) }}
       matrix:
+        # Create a package job for each command on Linux platforms
+        command: ${{ fromJson(needs.discover-commands.outputs.matrix) }}
         include:
           - goos: linux
             goarch: amd64
