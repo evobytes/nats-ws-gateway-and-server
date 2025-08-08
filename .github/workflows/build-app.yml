@@ -24,11 +24,10 @@ jobs:
       - name: Discover commands
         id: discover
         run: |
-          COMMANDS=$(ls -d cmd/*/ | xargs -n 1 basename | jq -R '{"app_name": .}' | jq -s .)
+          # The -c flag in jq creates a compact, single-line JSON output
+          COMMANDS=$(ls -d cmd/*/ | xargs -n 1 basename | jq -R '{"app_name": .}' | jq -s -c .)
           echo "Discovered commands: $COMMANDS"
-          echo "matrix<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$COMMANDS" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "matrix=$COMMANDS" >> "$GITHUB_OUTPUT"
 
   # Job 2: Build and Package all commands for all target platforms
   build-and-package:
@@ -109,20 +108,15 @@ jobs:
             --after-install ./.build/postinst.sh \
             -C "$STAGING_DIR" .
 
-      - name: Upload binary artifacts
+      - name: Upload all artifacts
         uses: actions/upload-artifact@v4
         with:
-          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}*
-          name: ${{ matrix.command.app_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
-
-      - name: Upload Linux packages
-        if: matrix.goos == 'linux' && startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.command.app_name }}-packages-${{ matrix.goarch }}
           path: |
+            bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}
             *.deb
             *.rpm
+          name: release-artifacts
+          merge-multiple: true
 
   # Job 3: Consolidate all artifacts and create a GitHub Release
   release:
@@ -130,18 +124,15 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     steps:
-      - name: Download all packages
+      - name: Download all release artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
-      - name: List all downloaded files
-        run: find artifacts -type f
+          name: release-artifacts
+          path: release-artifacts/
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
-            artifacts/**/*.exe
+            release-artifacts/*
           body: |
             Automated release for version ${{ github.ref_name }}.
