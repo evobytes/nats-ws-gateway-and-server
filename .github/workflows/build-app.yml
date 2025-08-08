@@ -12,10 +12,33 @@ permissions:
   contents: write
 
 jobs:
+
+  # Job 1: Discover all binaries in the cmd/ directory
+  discover-commands:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Discover commands
+        id: discover
+        # This step finds all subdirectories in 'cmd', gets their base names (e.g., "app1", "app2"),
+        # and formats them into a JSON array that the next jobs' matrices can use.
+        run: |
+          COMMANDS=$(ls -d cmd/*/ | xargs -n 1 basename | jq -R '{"app_name": .}' | jq -s .)
+          echo "Discovered commands: $COMMANDS"
+          echo "matrix=$COMMANDS" >> "$GITHUB_OUTPUT"
+
+  # Job 2: Build all commands for all target platforms
   build:
+    needs: [discover-commands]
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
+        # Create a build job for each combination of command and platform
+        command: ${{ fromJson(needs.discover-commands.outputs.matrix) }}
         include:
           - goos: linux
             goarch: amd64
@@ -23,134 +46,117 @@ jobs:
             goarch: arm64
           - goos: windows
             goarch: amd64
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.24.2'
-
-      - name: Build for ${{ matrix.goos }}-${{ matrix.goarch }}
+      - name: Build ${{ matrix.command.app_name }} for ${{ matrix.goos }}-${{ matrix.goarch }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          # Pass the app name to the Makefile
+          APP_NAME: ${{ matrix.command.app_name }}
         run: |
           make build
-
-      - name: Upload binary artifact
+      - name: Upload ${{ matrix.command.app_name }} binary artifact
         uses: actions/upload-artifact@v4
         with:
-          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server*
-          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}*
+          name: ${{ matrix.command.app_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
 
+  # Job 3: Package all Linux commands into .deb and .rpm
   package:
-    needs: [build]
+    needs: [discover-commands]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
+      # Create a package job for each command on Linux platforms
+      command: ${{ fromJson(needs.discover-commands.outputs.matrix) }}
       matrix:
         include:
           - goos: linux
             goarch: amd64
           - goos: linux
             goarch: arm64
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Download compiled binary
+      - name: Download compiled binary for ${{ matrix.command.app_name }}
         uses: actions/download-artifact@v4
         with:
-          name: nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ matrix.command.app_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}
-
       - name: List downloaded files
         run: |
-          find ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }} -type f
-
+          find ${{ github.workspace }}/artifacts/download/ -type f
       - name: Move and verify binary
         run: |
           mkdir -p bin
-          mv ${{ github.workspace }}/artifacts/download/${{ matrix.goos }}-${{ matrix.goarch }}/nats-ws-gateway-and-server bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
-
-          test -f bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }}
-
+          BINARY_NAME="${{ matrix.command.app_name }}"
+          SOURCE_PATH="${{ github.workspace }}/artifacts/download/${BINARY_NAME}/${{ matrix.goos }}-${{ matrix.goarch }}/${BINARY_NAME}"
+          DEST_PATH="bin/${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          mv "$SOURCE_PATH" "$DEST_PATH"
+          test -f "$DEST_PATH"
       - name: Install FPM
         run: |
           sudo apt-get update
           sudo apt-get install -y ruby-dev build-essential
           sudo gem install --no-document fpm
-
-      - name: Create Linux packages for ${{ matrix.goarch }}
+      - name: Create Linux packages for ${{ matrix.command.app_name }} (${{ matrix.goarch }})
+        env:
+          APP_NAME: ${{ matrix.command.app_name }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION=$(echo ${{ github.ref }} | sed -e 's|refs/tags/v||')
           echo "Packaging version: $VERSION"
-
-          STAGING_DIR="$PWD/dist"
+          STAGING_DIR="$PWD/dist/$APP_NAME"
           mkdir -p "$STAGING_DIR/usr/bin"
           mkdir -p "$STAGING_DIR/usr/lib/systemd/system"
           mkdir -p ./.build
-
-          echo "::group::Verifying presence of systemd service file"
-          ls -l .github/templates/
-          cat .github/templates/nats-ws-gateway-and-server.service || {
-            echo "::error::Missing or unreadable service file"
-            exit 1
-          }
-          echo "::endgroup::"
-
-          echo "::group::Copying files to staging area"
-          cp bin/nats-ws-gateway-and-server-${{ matrix.goos }}-${{ matrix.goarch }} "$STAGING_DIR/usr/bin/nats-ws-gateway-and-server"
-          cp .github/templates/nats-ws-gateway-and-server.service "$STAGING_DIR/usr/lib/systemd/system/nats-ws-gateway-and-server.service"
-          cp .github/templates/postinst.sh ./.build/postinst.sh
+          # Copy files dynamically
+          cp "bin/$APP_NAME-linux-$GOARCH" "$STAGING_DIR/usr/bin/$APP_NAME"
+          cp ".github/templates/$APP_NAME.service" "$STAGING_DIR/usr/lib/systemd/system/$APP_NAME.service"
+          cp ".github/templates/$APP_NAME.postinst.sh" ./.build/postinst.sh
           find "$STAGING_DIR" -type f
-          echo "::endgroup::"
-
           fpm \
             -s dir \
             -t deb \
-            --name nats-ws-gateway-and-server \
-            --version "$VERSION" \
+            --name "$APP_NAME" \
+            --version "${VERSION#v}" \
             --architecture ${{ matrix.goarch }} \
-            --description "NATS.io WebSocket Gateway and Embedded Server" \
+            --description "Description for $APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            -C "$STAGING_DIR" \
-            usr/bin/nats-ws-gateway-and-server \
-            usr/lib/systemd/system/nats-ws-gateway-and-server.service
-
+            -C "$STAGING_DIR" .
           fpm \
             -s dir \
             -t rpm \
-            --name nats-ws-gateway-and-server \
-            --version "$VERSION" \
+            --name "$APP_NAME" \
+            --version "${VERSION#v}" \
             --architecture ${{ matrix.goarch }} \
-            --description "NATS.io WebSocket Gateway and Embedded Server" \
+            --description "Description for $APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --url "https://github.com/evobytes/nats-ws-gateway-and-server" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
-            -C "$STAGING_DIR" \
-            usr/bin/nats-ws-gateway-and-server \
-            usr/lib/systemd/system/nats-ws-gateway-and-server.service
-
+            -C "$STAGING_DIR" .
       - name: List generated packages
-        run: ls -lh *.deb *.rpm
-
-      - name: Upload .deb and .rpm artifacts
+        run: ls -lh *
+      - name: Upload ${{ matrix.command.app_name }} artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nats-ws-gateway-and-server-packages-${{ matrix.goarch }}
+          name: ${{ matrix.command.app_name }}-packages-${{ matrix.goarch }}
           path: |
             *.deb
             *.rpm
 
+  # Job 4: Consolidate all artifacts and create a GitHub Release
   release:
     needs: [build, package]
     if: startsWith(github.ref, 'refs/tags/')
@@ -159,21 +165,16 @@ jobs:
       - name: Download all packages (amd64, arm64)
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/packages
-
-      - name: Download Windows binary
-        uses: actions/download-artifact@v4
-        with:
-          name: nats-ws-gateway-and-server-windows-amd64
-          path: artifacts/binaries/windows-amd64
-
+          path: artifacts/
+      - name: List all downloaded files
+        run: find artifacts -type f
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/packages/**/*.deb
-            artifacts/packages/**/*.rpm
-            artifacts/binaries/windows-amd64/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.exe
           body: |
-            Automated release of nats-ws-gateway-and-server packages for version ${{ github.ref_name }}.
+            Automated release for version ${{ github.ref_name }}.
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=NATS WebSocket Gateway and Server
+Description=NATS WebSocket Gateway and Server Logger
 After=network.target
 
 [Service]
@@ -7,7 +7,7 @@ Type=simple
 User=nats
 Group=nats
 WorkingDirectory=/usr/bin
-ExecStart=/usr/bin/nats-ws-gateway-and-server
+ExecStart=/usr/bin/nats-ws-gateway-and-server-logger
 Restart=on-failure
 RestartSec=5s
 
