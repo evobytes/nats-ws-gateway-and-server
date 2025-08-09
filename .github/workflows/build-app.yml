@@ -37,7 +37,7 @@ jobs:
       matrix:
         command: ${{ fromJson(needs.discover-commands.outputs.matrix) }}
         goos: [linux, windows]
-        goarch: [amd64,arm64]
+        goarch: amd64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
