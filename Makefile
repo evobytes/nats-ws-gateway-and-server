@@ -8,6 +8,11 @@ GOARCH ?= amd64
 
 BINDIR := bin/$(GOOS)-$(GOARCH)
 
+SUFFIX :=
+ifeq ($(GOOS),windows)
+SUFFIX := .exe
+endif
+
 usage:
 	@echo Usage $(CMDS)
 	@echo
@@ -24,11 +29,11 @@ build: fmt
 		echo "Building all commands..."; \
 		for cmd in $(CMDS); do \
 			echo "Building $$cmd..."; \
-			go build -C cmd/$$cmd -ldflags "-s -w" -o ../../$(BINDIR)/$$cmd .; \
+			go build -C cmd/$$cmd -ldflags "-s -w" -o ../../$(BINDIR)/$$cmd$(SUFFIX) .; \
 		done \
 	else \
 		echo "Building $(APP_NAME)..."; \
-		go build -C cmd/$(APP_NAME) -ldflags "-s -w" -o ../../$(BINDIR)/$(APP_NAME) .; \
+		go build -C cmd/$(APP_NAME) -ldflags "-s -w" -o ../../$(BINDIR)/$(APP_NAME)$(SUFFIX) .; \
 	fi
 	dir -hl $(BINDIR)
 

@@ -62,7 +62,7 @@ jobs:
         if: matrix.goos == 'linux' && startsWith(github.ref, 'refs/tags/')
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby-dev build-essential
+          sudo apt-get install -y ruby-dev build-essential rpm
           sudo gem install --no-document fpm
 
       - name: Create Linux packages for ${{ matrix.command.app_name }} (${{ matrix.goarch }})
@@ -86,19 +86,21 @@ jobs:
             -t deb \
             --name "$APP_NAME" \
             --version "${VERSION#v}" \
-            --architecture ${{ matrix.goarch }} \
+            --architecture "${GOARCH}" \
             --description "Description for $APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
             --after-install ./.build/postinst.sh \
             -C "$STAGING_DIR" .
+          RPM_ARCH="${GOARCH}"
+          if [ "$GOARCH" = "arm64" ]; then RPM_ARCH="aarch64"; fi
           fpm \
             -s dir \
             -t rpm \
             --name "$APP_NAME" \
             --version "${VERSION#v}" \
-            --architecture ${{ matrix.goarch }} \
+            --architecture "${RPMARCH}" \
             --description "Description for $APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
@@ -110,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: |
-            bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}
+            bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}*
             *.deb
             *.rpm
           name: ${{ matrix.command.app_name }}-${{ matrix.goos }}-${{ matrix.goarch }}-artifacts
@@ -133,5 +135,6 @@ jobs:
             artifacts/**/*.deb
             artifacts/**/*.rpm
             artifacts/**/*.exe
+            artifacts/**/bin/**
           body: |
             Automated release for version ${{ github.ref_name }}.
