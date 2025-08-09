@@ -97,7 +97,7 @@ func main() {
 		slog.Error("❌ Failed to subscribe to NATS", "topic", ">", "err", err)
 		os.Exit(1)
 	}
-	slog.Info("🎧 Subscribed to all topics (`>`). Logging traffic...")
+	slog.Info("🎧 Subscribed to all available topics (`>`). Logging traffic to", logFilePath)
 
 	// --- Graceful Shutdown ---
 	stop := make(chan os.Signal, 1)
