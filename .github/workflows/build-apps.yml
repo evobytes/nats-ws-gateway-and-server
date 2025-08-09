@@ -36,24 +36,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Find merge-base with remote main (fallback to initial commit)
           git fetch origin +refs/heads/main:refs/remotes/origin/main --depth=0 || true
           BASE=$(git merge-base origin/main HEAD || git rev-list --max-parents=0 HEAD)
 
           git diff --name-only "$BASE..HEAD" > changed.txt || true
-          echo "Changed files:"
-          cat changed.txt || true
+          echo "Changed files:"; cat changed.txt || true
 
-          # If shared deps changed, build all
           if grep -E '^(go\.mod|go\.sum|internal/|pkg/)' changed.txt >/dev/null 2>&1; then
             APPS=$(ls -d cmd/*/ | xargs -n1 basename)
           else
-            # Only cmds that changed under cmd/<app>/
             APPS=$(awk -F/ '/^cmd\/[^/]+\//{print $2}' changed.txt | sort -u)
           fi
 
           if [ -z "${APPS:-}" ]; then
-            echo "No app-level changes detected; matrix will be empty."
             echo '[]' > matrix.json
           else
             jq -nc --argjson a "$(printf '%s\n' $APPS | jq -R . | jq -s .)" '$a | map({app_name:.})' > matrix.json
@@ -93,35 +88,25 @@ jobs:
           sudo apt-get install -y ruby-dev build-essential rpm
           sudo gem install --no-document fpm
 
-      # Compute next per-app version using Conventional Commits since last tag appname/vX.Y.Z
       - name: Compute next version for ${{ matrix.command.app_name }}
         id: ver
         shell: bash
         run: |
+          echo "cmd=${{ matrix.command.app_name }} os=${{ matrix.goos }} arch=${{ matrix.goarch }}"
           set -euo pipefail
           APP="${{ matrix.command.app_name }}"
-
           git fetch --tags --force --prune
-
           LAST=$(git tag -l "${APP}/v*" --sort=-v:refname | head -n1 || true)
           if [ -z "$LAST" ]; then
-            BASE=""; RAW="0.0.0"
+            RAW="0.0.0"; BASE=""
           else
-            BASE="$LAST.."
-            RAW="${LAST#${APP}/v}"
+            RAW="${LAST#${APP}/v}"; BASE="$LAST.."
           fi
-
           COMMITS=$(git log --pretty=%s ${BASE}HEAD -- . || true)
-
           bump="patch"
-          if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then
-            bump="major"
-          elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then
-            bump="minor"
-          elif grep -qiE '^fix(\(|:)' <<<"$COMMITS" ; then
-            bump="patch"
-          fi
-
+          if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then bump="major"
+          elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then bump="minor"
+          elif grep -qiE '^fix(\(|:)' <<<"$COMMITS" ; then bump="patch"; fi
           IFS=. read -r MA MI PA <<<"$RAW"
           case "$bump" in
             major) MA=$((MA+1)); MI=0; PA=0;;
@@ -129,11 +114,7 @@ jobs:
             patch) PA=$((PA+1));;
           esac
           NEXT="${MA}.${MI}.${PA}"
-          TAG="${APP}/v${NEXT}"
-
           echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
-          echo "Computed $TAG from last='$LAST' bump=$bump"
 
       - name: Create Linux packages for ${{ matrix.command.app_name }} (${{ matrix.goarch }})
         if: matrix.goos == 'linux'
@@ -147,11 +128,9 @@ jobs:
           STAGING_DIR="$PWD/dist/$APP_NAME"
           mkdir -p "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/lib/systemd/system" ./.build
 
-          # copy the built binary (no extension on Linux)
           cp "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
              "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
 
-          # service + postinst scripts (optional, ignored if not present)
           if [ -f ".github/templates/$APP_NAME.service" ]; then
             cp ".github/templates/$APP_NAME.service" "$STAGING_DIR/usr/lib/systemd/system/$APP_NAME.service"
           fi
@@ -161,8 +140,6 @@ jobs:
           else
             POSTINST=""
           fi
-
-          find "$STAGING_DIR" -type f -print
 
           fpm -s dir -t deb \
             --name "$APP_NAME" \
@@ -175,8 +152,7 @@ jobs:
             ${POSTINST} \
             -C "$STAGING_DIR" .
 
-          RPM_ARCH="${GOARCH}"
-          if [ "$GOARCH" = "arm64" ]; then RPM_ARCH="aarch64"; fi
+          RPM_ARCH="${GOARCH}"; [ "$GOARCH" = "arm64" ] && RPM_ARCH="aarch64"
 
           fpm -s dir -t rpm \
             --name "$APP_NAME" \
@@ -199,21 +175,19 @@ jobs:
             *.rpm
           overwrite: true
 
-  # 4) Per-app tag + release (Pattern 3), only for apps that actually built
+  # 4) Per-app tag + release: run for the SAME matrix as build-and-package
   per-app-release:
     runs-on: ubuntu-24.04
     needs: [build-and-package, discover-commands, discover-changed]
-    # If nothing changed, skip this job entirely
-    if: needs.discover-changed.outputs.changed_cmds != '[]'
     strategy:
       fail-fast: false
       matrix:
-        command: ${{ fromJson(needs.discover-changed.outputs.changed_cmds) }}
+        command: ${{ fromJson( (needs.discover-changed.outputs.changed_cmds != '[]' && needs.discover-changed.outputs.changed_cmds) || needs.discover-commands.outputs.all_cmds ) }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
 
-      # Recompute version to ensure tag matches exactly what we packaged
+      # Recompute per-app version (same logic) so tag matches packaged version
       - name: Compute next version for ${{ matrix.command.app_name }}
         id: ver
         shell: bash
@@ -245,7 +219,6 @@ jobs:
         run: |
           git config user.name  "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          # idempotent tag create (force-move only if you prefer; here we fail if exists)
           if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
             echo "Tag ${TAG} already exists; skipping."
           else
@@ -258,7 +231,23 @@ jobs:
         with:
           path: artifacts/
 
+      # Only release if this app actually produced files
+      - name: Detect files for this app
+        id: have
+        shell: bash
+        run: |
+          shopt -s nullglob
+          app="${{ matrix.command.app_name }}"
+          files=(artifacts/**/*"${app}"*.deb artifacts/**/*"${app}"*.rpm artifacts/**/*"${app}"*.exe)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' "${files[@]}"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub Release for ${{ steps.ver.outputs.tag }}
+        if: steps.have.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
