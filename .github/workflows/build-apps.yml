@@ -243,9 +243,9 @@ jobs:
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           files: |
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
-            artifacts/**/*.exe
+            artifacts/**/${{ matrix.command.app_name }}.exe
+            artifacts/**/${{ matrix.command.app_name }}_[0-9]*.deb
+            artifacts/**/${{ matrix.command.app_name }}-[0-9]*.rpm
           body: |
             Automated release for ${{ steps.ver.outputs.tag }}.
 
