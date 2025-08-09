@@ -40,6 +40,7 @@ jobs:
         goarch: [amd64]
         include:
           - goos: linux
+            goarch: arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -97,7 +98,7 @@ jobs:
             -t rpm \
             --name "$APP_NAME" \
             --version "${VERSION#v}" \
-            --architecture "${RPMARCH}" \
+            --architecture "${RPM_ARCH}" \
             --description "Description for $APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
