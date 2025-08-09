@@ -1,0 +1,271 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 1) Discover all commands under cmd/
+  discover-commands:
+    runs-on: ubuntu-24.04
+    outputs:
+      all_cmds: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: discover
+        run: |
+          COMMANDS=$(ls -d cmd/*/ | xargs -n 1 basename | jq -R '{"app_name": .}' | jq -s -c .)
+          echo "Discovered commands: $COMMANDS"
+          echo "matrix=$COMMANDS" >> "$GITHUB_OUTPUT"
+
+  # 2) Discover changed commands (B)
+  discover-changed:
+    runs-on: ubuntu-24.04
+    needs: [discover-commands]
+    outputs:
+      changed_cmds: ${{ steps.changed.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Find merge-base with remote main (fallback to initial commit)
+          git fetch origin +refs/heads/main:refs/remotes/origin/main --depth=0 || true
+          BASE=$(git merge-base origin/main HEAD || git rev-list --max-parents=0 HEAD)
+
+          git diff --name-only "$BASE..HEAD" > changed.txt || true
+          echo "Changed files:"
+          cat changed.txt || true
+
+          # If shared deps changed, build all
+          if grep -E '^(go\.mod|go\.sum|internal/|pkg/)' changed.txt >/dev/null 2>&1; then
+            APPS=$(ls -d cmd/*/ | xargs -n1 basename)
+          else
+            # Only cmds that changed under cmd/<app>/
+            APPS=$(awk -F/ '/^cmd\/[^/]+\//{print $2}' changed.txt | sort -u)
+          fi
+
+          if [ -z "${APPS:-}" ]; then
+            echo "No app-level changes detected; matrix will be empty."
+            echo '[]' > matrix.json
+          else
+            jq -nc --argjson a "$(printf '%s\n' $APPS | jq -R . | jq -s .)" '$a | map({app_name:.})' > matrix.json
+          fi
+          echo "matrix=$(cat matrix.json)"
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+
+  # 3) Build & package only changed apps (fallback to all if none changed)
+  build-and-package:
+    runs-on: ubuntu-24.04
+    needs: [discover-commands, discover-changed]
+    strategy:
+      fail-fast: false
+      matrix:
+        command: ${{ fromJson( (needs.discover-changed.outputs.changed_cmds != '[]' && needs.discover-changed.outputs.changed_cmds) || needs.discover-commands.outputs.all_cmds ) }}
+        goos: [linux, windows]
+        goarch: [amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.2'
+
+      - name: Build ${{ matrix.command.app_name }} for ${{ matrix.goos }}-${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          APP_NAME: ${{ matrix.command.app_name }}
+        run: |
+          make build
+
+      - name: Install FPM (Linux only)
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-dev build-essential rpm
+          sudo gem install --no-document fpm
+
+      # Compute next per-app version using Conventional Commits since last tag appname/vX.Y.Z
+      - name: Compute next version for ${{ matrix.command.app_name }}
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="${{ matrix.command.app_name }}"
+
+          git fetch --tags --force --prune
+
+          LAST=$(git tag -l "${APP}/v*" --sort=-v:refname | head -n1 || true)
+          if [ -z "$LAST" ]; then
+            BASE=""; RAW="0.0.0"
+          else
+            BASE="$LAST.."
+            RAW="${LAST#${APP}/v}"
+          fi
+
+          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- . || true)
+
+          bump="patch"
+          if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then
+            bump="major"
+          elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then
+            bump="minor"
+          elif grep -qiE '^fix(\(|:)' <<<"$COMMITS" ; then
+            bump="patch"
+          fi
+
+          IFS=. read -r MA MI PA <<<"$RAW"
+          case "$bump" in
+            major) MA=$((MA+1)); MI=0; PA=0;;
+            minor) MI=$((MI+1)); PA=0;;
+            patch) PA=$((PA+1));;
+          esac
+          NEXT="${MA}.${MI}.${PA}"
+          TAG="${APP}/v${NEXT}"
+
+          echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
+          echo "Computed $TAG from last='$LAST' bump=$bump"
+
+      - name: Create Linux packages for ${{ matrix.command.app_name }} (${{ matrix.goarch }})
+        if: matrix.goos == 'linux'
+        env:
+          APP_NAME: ${{ matrix.command.app_name }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+          echo "Packaging version: $VERSION"
+          STAGING_DIR="$PWD/dist/$APP_NAME"
+          mkdir -p "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/lib/systemd/system" ./.build
+
+          # copy the built binary (no extension on Linux)
+          cp "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
+             "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
+
+          # service + postinst scripts (optional, ignored if not present)
+          if [ -f ".github/templates/$APP_NAME.service" ]; then
+            cp ".github/templates/$APP_NAME.service" "$STAGING_DIR/usr/lib/systemd/system/$APP_NAME.service"
+          fi
+          if [ -f ".github/templates/$APP_NAME.postinst.sh" ]; then
+            cp ".github/templates/$APP_NAME.postinst.sh" ./.build/postinst.sh
+            POSTINST="--after-install ./.build/postinst.sh"
+          else
+            POSTINST=""
+          fi
+
+          find "$STAGING_DIR" -type f -print
+
+          fpm -s dir -t deb \
+            --name "$APP_NAME" \
+            --version "${VERSION}" \
+            --architecture "${GOARCH}" \
+            --description "$APP_NAME" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --license "MIT" \
+            ${POSTINST} \
+            -C "$STAGING_DIR" .
+
+          RPM_ARCH="${GOARCH}"
+          if [ "$GOARCH" = "arm64" ]; then RPM_ARCH="aarch64"; fi
+
+          fpm -s dir -t rpm \
+            --name "$APP_NAME" \
+            --version "${VERSION}" \
+            --architecture "${RPM_ARCH}" \
+            --description "$APP_NAME" \
+            --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
+            --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --license "MIT" \
+            ${POSTINST} \
+            -C "$STAGING_DIR" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.command.app_name }}-${{ matrix.goos }}-${{ matrix.goarch }}-artifacts
+          path: |
+            bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}*
+            *.deb
+            *.rpm
+          overwrite: true
+
+  # 4) Per-app tag + release (Pattern 3), only for apps that actually built
+  per-app-release:
+    runs-on: ubuntu-24.04
+    needs: [build-and-package, discover-commands, discover-changed]
+    # If nothing changed, skip this job entirely
+    if: needs.discover-changed.outputs.changed_cmds != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        command: ${{ fromJson(needs.discover-changed.outputs.changed_cmds) }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      # Recompute version to ensure tag matches exactly what we packaged
+      - name: Compute next version for ${{ matrix.command.app_name }}
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="${{ matrix.command.app_name }}"
+          git fetch --tags --force --prune
+          LAST=$(git tag -l "${APP}/v*" --sort=-v:refname | head -n1 || true)
+          if [ -z "$LAST" ]; then RAW="0.0.0"; BASE=""; else RAW="${LAST#${APP}/v}"; BASE="$LAST.."; fi
+          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- . || true)
+          bump="patch"
+          if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then bump="major"
+          elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then bump="minor"
+          elif grep -qiE '^fix(\(|:)' <<<"$COMMITS" ; then bump="patch"; fi
+          IFS=. read -r MA MI PA <<<"$RAW"
+          case "$bump" in
+            major) MA=$((MA+1)); MI=0; PA=0;;
+            minor) MI=$((MI+1)); PA=0;;
+            patch) PA=$((PA+1));;
+          esac
+          NEXT="${MA}.${MI}.${PA}"
+          TAG="${APP}/v${NEXT}"
+          echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
+
+      - name: Create & push per-app tag
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          git config user.name  "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          # idempotent tag create (force-move only if you prefer; here we fail if exists)
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists; skipping."
+          else
+            git tag -a "${TAG}" -m "Auto-release ${TAG}"
+            git push origin "${TAG}"
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release for ${{ steps.ver.outputs.tag }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            artifacts/**/*${{ matrix.command.app_name }}*.deb
+            artifacts/**/*${{ matrix.command.app_name }}*.rpm
+            artifacts/**/*${{ matrix.command.app_name }}*.exe
+          body: |
+            Automated release for ${{ steps.ver.outputs.tag }}.
+
