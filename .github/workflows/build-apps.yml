@@ -136,6 +136,7 @@ jobs:
           fi
           if [ -f ".github/templates/$APP_NAME.postinst.sh" ]; then
             cp ".github/templates/$APP_NAME.postinst.sh" ./.build/postinst.sh
+            chmod a+x ./.build/postinst.sh
             POSTINST="--after-install ./.build/postinst.sh"
           else
             POSTINST=""

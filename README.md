@@ -1,4 +1,4 @@
-[![Build and Release](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-app.yml/badge.svg)](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-app.yml)
+[![Build and Release](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-apps.yml/badge.svg?branch=main)](https://github.com/evobytes/nats-ws-gateway-and-server/actions/workflows/build-apps.yml)
 
 ## nats-ws-gateway-and-server
 
