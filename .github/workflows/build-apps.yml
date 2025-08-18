@@ -68,10 +68,13 @@ jobs:
         goarch: [amd64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.2'
+          go-version: 'stable'
+          cache: true
 
       - name: Build ${{ matrix.command.app_name }} for ${{ matrix.goos }}-${{ matrix.goarch }}
         env:
@@ -102,7 +105,7 @@ jobs:
           else
             RAW="${LAST#${APP}/v}"; BASE="$LAST.."
           fi
-          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- . || true)
+          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- cmd/${APP}/ internal/ pkg/ || true)
           bump="patch"
           if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then bump="major"
           elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then bump="minor"
@@ -126,17 +129,20 @@ jobs:
           set -euo pipefail
           echo "Packaging version: $VERSION"
           STAGING_DIR="$PWD/dist/$APP_NAME"
-          mkdir -p "$STAGING_DIR/etc/default" "$STAGING_DIR/usr/bin" "$STAGING_DIR/usr/lib/systemd/system" ./.build
+          mkdir -p "$STAGING_DIR/etc/default" "$STAGING_DIR/usr/bin" ./.build
 
-          cp "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
+          install -m 0755 "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
              "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
 
+          # Optional unit/defaults for DEB
           if [ -f ".github/templates/$APP_NAME.service" ]; then
-            cp ".github/templates/$APP_NAME.service" "$STAGING_DIR/usr/lib/systemd/system/$APP_NAME.service"
+            SYSUNIT_DIR=/lib/systemd/system
+            mkdir -p "$STAGING_DIR$SYSUNIT_DIR"
+            install -m 0644 ".github/templates/$APP_NAME.service" "$STAGING_DIR$SYSUNIT_DIR/$APP_NAME.service"
           fi
 
           if [ -f ".github/templates/$APP_NAME.default" ]; then
-            cp ".github/templates/$APP_NAME.default" "$STAGING_DIR/etc/default/$APP_NAME"
+            install -m 0644 ".github/templates/$APP_NAME.default" "$STAGING_DIR/etc/default/$APP_NAME"
           fi
 
           if [ -f ".github/templates/$APP_NAME.postinst.sh" ]; then
@@ -159,17 +165,26 @@ jobs:
             ${POSTINST} \
             -C "$STAGING_DIR" .
 
+          # Prepare RPM unit dir only if unit exists
+          if [ -f ".github/templates/$APP_NAME.service" ]; then
+            SYSUNIT_DIR=/usr/lib/systemd/system
+            mkdir -p "$STAGING_DIR$SYSUNIT_DIR"
+            install -m 0644 ".github/templates/$APP_NAME.service" "$STAGING_DIR$SYSUNIT_DIR/$APP_NAME.service"
+          fi
+
           RPM_ARCH="${GOARCH}"; [ "$GOARCH" = "arm64" ] && RPM_ARCH="aarch64"
 
           fpm -s dir -t rpm \
             --name "$APP_NAME" \
             --version "${VERSION}" \
+            --iteration "1" \
             --architecture "${RPM_ARCH}" \
             --description "$APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
             --config-files /etc/default/$APP_NAME \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
+            --rpm-user root --rpm-group root --rpm-os linux \
             ${POSTINST} \
             -C "$STAGING_DIR" .
 
@@ -205,7 +220,7 @@ jobs:
           git fetch --tags --force --prune
           LAST=$(git tag -l "${APP}/v*" --sort=-v:refname | head -n1 || true)
           if [ -z "$LAST" ]; then RAW="0.0.0"; BASE=""; else RAW="${LAST#${APP}/v}"; BASE="$LAST.."; fi
-          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- . || true)
+          COMMITS=$(git log --pretty=%s ${BASE}HEAD -- cmd/${APP}/ internal/ pkg/ || true)
           bump="patch"
           if grep -qiE 'BREAKING CHANGE|!: ' <<<"$COMMITS" ; then bump="major"
           elif grep -qiE '^feat(\(|:)|^feature' <<<"$COMMITS" ; then bump="minor"
