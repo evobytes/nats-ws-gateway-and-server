@@ -18,9 +18,6 @@ const (
 	// The file path for logging all NATS traffic.
 	// NOTE: Writing to /var/log typically requires elevated (root) privileges.
 	logFilePath = "/var/log/nats-ws-gateway-and-server/traffic.log"
-
-	// The default NATS server URL to connect to. Can be overridden with NATS_URL env var.
-	defaultNatsURL = "nats://127.0.0.1:5050"
 )
 
 // logEntry defines the structure for a single log record.
@@ -39,11 +36,18 @@ func main() {
 		Level: slog.LevelInfo,
 	})))
 
-	// Determine NATS server URL from environment or use default
-	natsURL := os.Getenv("NATS_URL")
-	if natsURL == "" {
-		natsURL = defaultNatsURL
+	// configuration - default and envvar overrides
+	natsHost := os.Getenv("NATS_BIND")
+	if natsHost == "" {
+		natsHost = "127.0.0.1" // Fallback to default if not set
 	}
+
+	natsPort := os.Getenv("NATS_PORT")
+	if natsPort == "" {
+		natsPort = "5050" // Fallback to default if not set
+	}
+
+	natsURL := fmt.Sprintf("nats://%s:%s", natsHost, natsPort)
 
 	// --- Log File Setup ---
 	logDir := filepath.Dir(logFilePath)

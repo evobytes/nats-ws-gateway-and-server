@@ -68,10 +68,29 @@ func main() {
 		Level: level,
 	})))
 
+	// configuration - default and envvar overrides
+	natsHost := os.Getenv("NATS_BIND")
+	if natsHost == "" {
+		natsHost = "127.0.0.1" // Fallback to default if not set
+	}
+
+	natsPortStr := os.Getenv("NATS_PORT")
+	natsPort, err := strconv.Atoi(natsPortStr)
+	if err != nil {
+		natsPort = 5050 // Fallback to default if conversion fails
+	}
+
+	httpPortStr := os.Getenv("NATS_HTTP_PORT")
+	if httpPortStr == "" {
+		httpPortStr = "8080" // Fallback to default if not set
+	}
+
+	httpAddr := fmt.Sprintf("%s:%s", natsHost, httpPortStr)
+
 	// NATS server setup
 	opts := &natsserver.Options{
-		Host:           "127.0.0.1",
-		Port:           5050,
+		Host:           natsHost,
+		Port:           natsPort,
 		NoLog:          false,
 		NoSigs:         true,
 		MaxControlLine: 256,
@@ -136,11 +155,11 @@ func main() {
 		}
 	})
 
-	server := &http.Server{Addr: ":8080"}
+	server := &http.Server{Addr: httpAddr}
 
 	// Start HTTP server
 	go func() {
-		slog.Info("🌐 Server on :8080")
+		slog.Info("🌐 Server on", "httpAddr", httpAddr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("❌ HTTP server error", "err", err)
 			os.Exit(1)
