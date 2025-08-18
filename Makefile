@@ -58,25 +58,24 @@ print-vars:
 	@echo CMDS=$(CMDS)
 
 build: fmt
-	-mkdir -p $(BINDIR)
+	@mkdir -p "$(BINDIR)"
 ifeq ($(strip $(APP_NAME)),)
 	@echo "Building all commands for $(GOOS)/$(GOARCH) (CGO_ENABLED=$(CGO_ENABLED))..."
-	@set -e; \
-	for cmd in $(CMDS); do \
+	@set -e; for cmd in $(CMDS); do \
 		[ -d "cmd/$$cmd" ] || continue; \
 		echo "→ $$cmd"; \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 		  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
-		    -C cmd/$$cmd -o ../../$(BINDIR)/$$cmd$(SUFFIX) . ; \
+		  -o "$(BINDIR)/$$cmd$(SUFFIX)" ./cmd/$$cmd; \
 	done
 else
 	@[ -d "cmd/$(APP_NAME)" ] || { echo "Error: cmd/$(APP_NAME) does not exist"; exit 1; }
 	@echo "Building $(APP_NAME) for $(GOOS)/$(GOARCH) (CGO_ENABLED=$(CGO_ENABLED))..."
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
-	    -C cmd/$(APP_NAME) -o ../../$(BINDIR)/$(APP_NAME)$(SUFFIX) .
+	  -o "$(BINDIR)/$(APP_NAME)$(SUFFIX)" ./cmd/$(APP_NAME)
 endif
-	dir -hl $(BINDIR)
+	@ls -hl "$(BINDIR)" || true
 
 run: fmt
 ifndef cmd
