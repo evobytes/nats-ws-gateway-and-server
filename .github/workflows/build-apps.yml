@@ -129,20 +129,20 @@ jobs:
           set -euo pipefail
           echo "Packaging version: $VERSION"
           STAGING_DIR="$PWD/dist/$APP_NAME"
-          mkdir -p "$STAGING_DIR/etc/default" "$STAGING_DIR/usr/bin" ./.build
+          mkdir -p "$STAGING_DIR/etc/$APP_NAME" "$STAGING_DIR/usr/bin" ./.build
 
           install -m 0755 "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
              "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
 
-          # Optional unit/defaults for DEB
+          # Optional unit/env for DEB
           if [ -f ".github/templates/$APP_NAME.service" ]; then
             SYSUNIT_DIR=/lib/systemd/system
             mkdir -p "$STAGING_DIR$SYSUNIT_DIR"
             install -m 0644 ".github/templates/$APP_NAME.service" "$STAGING_DIR$SYSUNIT_DIR/$APP_NAME.service"
           fi
 
-          if [ -f ".github/templates/$APP_NAME.default" ]; then
-            install -m 0644 ".github/templates/$APP_NAME.default" "$STAGING_DIR/etc/default/$APP_NAME"
+          if [ -f ".github/templates/$APP_NAME.env" ]; then
+            install -m 0644 ".github/templates/$APP_NAME.env" "$STAGING_DIR/etc/$APP_NAME/config.env"
           fi
 
           if [ -f ".github/templates/$APP_NAME.postinst.sh" ]; then
@@ -159,7 +159,7 @@ jobs:
             --architecture "${GOARCH}" \
             --description "$APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --config-files /etc/default/$APP_NAME \
+            --config-files /etc/$APP_NAME/config.env \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
             ${POSTINST} \
@@ -181,7 +181,7 @@ jobs:
             --architecture "${RPM_ARCH}" \
             --description "$APP_NAME" \
             --maintainer "Dave Bevan <dave.bevan@evobytes.co.uk>" \
-            --config-files /etc/default/$APP_NAME \
+            --config-files /etc/$APP_NAME/config.env \
             --url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
             --license "MIT" \
             --rpm-user root --rpm-group root --rpm-os linux \
