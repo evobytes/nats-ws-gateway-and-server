@@ -76,6 +76,11 @@ jobs:
           go-version: 'stable'
           cache: true
 
+      - name: Verify Go module versions
+        run: |
+          cat go.mod
+          go list -m all
+
       - name: Build ${{ matrix.command.app_name }} for ${{ matrix.goos }}-${{ matrix.goarch }}
         env:
           GOOS: ${{ matrix.goos }}
