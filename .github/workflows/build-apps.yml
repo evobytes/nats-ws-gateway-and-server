@@ -74,8 +74,14 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
+          cache: false
           #cache: true
-          cache-dependency-path: go.sum
+          #cache-dependency-path: go.sum
+
+      - name: Clear Go caches
+        run: |
+          go clean -modcache
+          rm -rf ~/.cache/go-build
 
       - name: Verify Go module versions
         run: |
