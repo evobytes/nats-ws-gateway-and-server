@@ -45,6 +45,8 @@ usage:
 
 fmt:
 	go fmt ./...
+	go get ./...
+	go mod tidy
 
 print-vars:
 	@echo GOOS=$(GOOS)
@@ -64,8 +66,6 @@ ifeq ($(strip $(APP_NAME)),)
 	@set -e; for cmd in $(CMDS); do \
 		[ -d "cmd/$$cmd" ] || continue; \
 		echo "→ $$cmd"; \
-		go get ./...
-		go mod tidy
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 		  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
 		  -o "$(BINDIR)/$$cmd$(SUFFIX)" ./cmd/$$cmd; \
