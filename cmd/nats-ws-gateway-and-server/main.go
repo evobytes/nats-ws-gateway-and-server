@@ -99,7 +99,6 @@ func main() {
 		Trace:          false,
 		Debug:          false,
 		HTTPPort:       8222,
-		HTTPHost:       natsHost,
 	}
 
 	ns, err := natsserver.NewServer(opts)
