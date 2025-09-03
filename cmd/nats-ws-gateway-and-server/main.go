@@ -98,6 +98,8 @@ func main() {
 		JetStream:      false,
 		Trace:          false,
 		Debug:          false,
+		MonitoringPort: 8222,
+		HttpPort:       natsHost,
 	}
 
 	ns, err := natsserver.NewServer(opts)
