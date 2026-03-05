@@ -25,7 +25,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-var topicValidator = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+var topicValidator = regexp.MustCompile(`^[a-zA-Z0-9*>._-]+$`)
 
 type customLogger struct{}
 
