@@ -141,8 +141,8 @@ jobs:
           set -euo pipefail
           echo "Packaging version: $VERSION"
           STAGING_DIR="$PWD/dist/$APP_NAME"
-          mkdir -p "$STAGING_DIR/etc/$APP_NAME" "$STAGING_DIR/usr/bin" ./.build
 
+          mkdir -p "$STAGING_DIR/usr/bin"
           install -m 0755 "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
              "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
 
@@ -154,9 +154,16 @@ jobs:
           fi
 
           if [ -f ".github/templates/$APP_NAME.env" ]; then
+            mkdir -p "$STAGING_DIR/etc/$APP_NAME"
             install -m 0644 ".github/templates/$APP_NAME.env" "$STAGING_DIR/etc/$APP_NAME/config.env"
           fi
 
+          if [ -f ".github/templates/www.conf" ]; then
+            mkdir -p "$STAGING_DIR/opt/hive-apps/$APP_NAME/apache.conf.d"
+            install -m 0644 ".github/templates/www.conf" "$STAGING_DIR/opt/hive-apps/$APP_NAME/apache.conf.d/www.conf"
+          fi
+
+          mkdir -p ./.build
           if [ -f ".github/templates/$APP_NAME.postinst.sh" ]; then
             cp ".github/templates/$APP_NAME.postinst.sh" ./.build/postinst.sh
             chmod a+x ./.build/postinst.sh
