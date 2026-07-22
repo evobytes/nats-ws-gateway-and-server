@@ -35,6 +35,13 @@ LDFLAGS := -s -w -buildid= \
 GOFLAGS ?=
 # Example: GOFLAGS += -tags netgo
 
+# nats-cli is bundled with nats-ws-gateway-and-server as a sub-executable.
+# It lives nested under cmd/nats-ws-gateway-and-server/nats-cli so that the
+# shallow "wildcard cmd/*" discovery above does not treat it as its own
+# independently-versioned/released command.
+NATS_CLI_APP := nats-ws-gateway-and-server
+NATS_CLI_SRC := cmd/$(NATS_CLI_APP)/nats-cli
+
 usage:
 	@echo Usage $(CMDS)
 	@echo
@@ -70,14 +77,25 @@ ifeq ($(strip $(APP_NAME)),)
 		  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
 		  -o "$(BINDIR)/$$cmd$(SUFFIX)" ./cmd/$$cmd; \
 	done
+	@$(MAKE) build-nats-cli
 else
 	@[ -d "cmd/$(APP_NAME)" ] || { echo "Error: cmd/$(APP_NAME) does not exist"; exit 1; }
 	@echo "Building $(APP_NAME) for $(GOOS)/$(GOARCH) (CGO_ENABLED=$(CGO_ENABLED))..."
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
 	  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
 	  -o "$(BINDIR)/$(APP_NAME)$(SUFFIX)" ./cmd/$(APP_NAME)
+ifeq ($(APP_NAME),$(NATS_CLI_APP))
+	@$(MAKE) build-nats-cli
+endif
 endif
 	@ls -hl "$(BINDIR)" || true
+
+build-nats-cli:
+	@mkdir -p "$(BINDIR)"
+	@echo "→ nats-cli"
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=$(CGO_ENABLED) \
+	  go build $(GOFLAGS) -trimpath -ldflags "$(LDFLAGS)" \
+	  -o "$(BINDIR)/nats-cli$(SUFFIX)" ./$(NATS_CLI_SRC)
 
 run: fmt
 ifndef cmd

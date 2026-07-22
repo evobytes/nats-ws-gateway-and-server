@@ -146,6 +146,15 @@ jobs:
           install -m 0755 "bin/${{ matrix.goos }}-${{ matrix.goarch }}/${{ matrix.command.app_name }}" \
              "$STAGING_DIR/usr/bin/${{ matrix.command.app_name }}"
 
+          # nats-cli is bundled as a sub-executable of nats-ws-gateway-and-server
+          # (see cmd/nats-ws-gateway-and-server/nats-cli) rather than tracked as
+          # its own cmd/ entry, so stage it into the same package here.
+          if [ "$APP_NAME" = "nats-ws-gateway-and-server" ]; then
+            mkdir -p "$STAGING_DIR/usr/local/bin"
+            install -m 0755 "bin/${{ matrix.goos }}-${{ matrix.goarch }}/nats-cli" \
+               "$STAGING_DIR/usr/local/bin/nats-cli"
+          fi
+
           # Optional unit/env for DEB
           if [ -f ".github/templates/$APP_NAME.service" ]; then
             SYSUNIT_DIR=/lib/systemd/system
