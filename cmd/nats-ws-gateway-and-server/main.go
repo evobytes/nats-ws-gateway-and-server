@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 	natsserver "github.com/nats-io/nats-server/v2/server"
@@ -198,7 +199,14 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, topic string, nc *n
 
 	// Subscribe to NATS for messages to send to the WebSocket client
 	sub, err := nc.Subscribe(topic, func(m *nats.Msg) {
-		err := conn.WriteMessage(websocket.TextMessage, m.Data)
+		// Not all payloads carry a message-type hint, so infer text vs
+		// binary framing from the bytes: valid UTF-8 goes out as a text
+		// frame, anything else (e.g. gzip) goes out as a binary frame.
+		wsMessageType := websocket.TextMessage
+		if !utf8.Valid(m.Data) {
+			wsMessageType = websocket.BinaryMessage
+		}
+		err := conn.WriteMessage(wsMessageType, m.Data)
 		if err != nil {
 			slog.Warn("❌ Write to WS failed", "err", err, "client", r.RemoteAddr)
 		}
