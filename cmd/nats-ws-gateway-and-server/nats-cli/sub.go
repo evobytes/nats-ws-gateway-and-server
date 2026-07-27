@@ -28,7 +28,7 @@ func runSub(args []string) {
 	count := 0
 	sub, err := nc.Subscribe(subject, func(m *nats.Msg) {
 		count++
-		fmt.Printf("[%s] [#%d] Received on %q: %s\n", time.Now().Format("15:04:05"), count, m.Subject, string(m.Data))
+		fmt.Printf("[%s] [#%d] Received on %q: %s\n", time.Now().Format("15:04:05.000"), count, m.Subject, string(m.Data))
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to subscribe to %q: %v\n", subject, err)
