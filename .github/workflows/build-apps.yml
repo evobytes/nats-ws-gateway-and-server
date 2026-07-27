@@ -289,6 +289,85 @@ jobs:
       - name: List files
         run: find artifacts -type f -maxdepth 3 -printf "%P\n" | sort
 
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="${{ matrix.command.app_name }}"
+          THIS_TAG="${{ steps.ver.outputs.tag }}"
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+
+          SCOPE_PATHS=("cmd/${APP}/" "internal/" "pkg/")
+
+          LAST_TAG="$(git tag -l "${APP}/v*" --sort=-v:refname | grep -vFx "${THIS_TAG}" | head -1 || true)"
+
+          THIS_RELEASE_RAW="$(mktemp)"
+          THIS_RELEASE_FORMATTED="$(mktemp)"
+          RECENT_CHANGES_RAW="$(mktemp)"
+          RECENT_CHANGES_FORMATTED="$(mktemp)"
+          RELEASE_BODY="$(mktemp)"
+
+          format_commit_list() {
+            local source_file="$1"
+            local output_file="$2"
+
+            while IFS= read -r line || [ -n "$line" ]; do
+              [ -z "$line" ] && continue
+
+              hash="$(printf '%s\n' "$line" | grep -oE '[0-9a-f]{7,40}' | head -1 || true)"
+              if [ -n "${hash}" ]; then
+                rest="$(printf '%s\n' "$line" | sed -E 's/^[^[:xdigit:]]*[0-9a-f]{7,40}[[:space:]]*//')"
+                printf -- '- [`%s`](%s/commit/%s) %s\n' "${hash}" "${REPO_URL}" "${hash}" "${rest}" >> "${output_file}"
+              else
+                printf -- '- %s\n' "$line" >> "${output_file}"
+              fi
+            done < "${source_file}"
+          }
+
+          if [ -n "${LAST_TAG}" ]; then
+            git log --oneline "${LAST_TAG}..HEAD" -- "${SCOPE_PATHS[@]}" > "${THIS_RELEASE_RAW}"
+          else
+            git log --oneline -- "${SCOPE_PATHS[@]}" > "${THIS_RELEASE_RAW}"
+          fi
+
+          git log --oneline -n 35 -- "${SCOPE_PATHS[@]}" > "${RECENT_CHANGES_RAW}"
+
+          if [ -s "${THIS_RELEASE_RAW}" ]; then
+            format_commit_list "${THIS_RELEASE_RAW}" "${THIS_RELEASE_FORMATTED}"
+          fi
+
+          if [ -s "${RECENT_CHANGES_RAW}" ]; then
+            format_commit_list "${RECENT_CHANGES_RAW}" "${RECENT_CHANGES_FORMATTED}"
+          fi
+
+          {
+            echo "Automated release for ${THIS_TAG}."
+            echo ""
+            echo "<details open><summary><h3>This Release</h3></summary>"
+            echo ""
+            if [ -s "${THIS_RELEASE_FORMATTED}" ]; then
+              cat "${THIS_RELEASE_FORMATTED}"
+            else
+              echo "- Initial release or no scoped commits found since the previous tag."
+            fi
+            echo ""
+            echo "</details>"
+            echo ""
+            echo "<details><summary><h3>Recent Changes (35)</h3></summary>"
+            echo ""
+            if [ -s "${RECENT_CHANGES_FORMATTED}" ]; then
+              cat "${RECENT_CHANGES_FORMATTED}"
+            else
+              echo "- No recent scoped history available."
+            fi
+            echo ""
+            echo "</details>"
+          } > "${RELEASE_BODY}"
+
+          echo "notes_file=${RELEASE_BODY}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release for ${{ steps.ver.outputs.tag }}
         uses: softprops/action-gh-release@v2
         with:
@@ -297,6 +376,5 @@ jobs:
             artifacts/**/${{ matrix.command.app_name }}.exe
             artifacts/**/${{ matrix.command.app_name }}_[0-9]*.deb
             artifacts/**/${{ matrix.command.app_name }}-[0-9]*.rpm
-          body: |
-            Automated release for ${{ steps.ver.outputs.tag }}.
+          body_path: ${{ steps.notes.outputs.notes_file }}
 
