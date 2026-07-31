@@ -24,7 +24,9 @@ chmod a+x /usr/bin/nats-ws-gateway-and-server-logger || true
 # The service file is installed by the package, but systemd needs to be
 # reloaded to see the new unit file.
 systemctl daemon-reload
-systemctl enable nats-ws-gateway-and-server-logger.service
-systemctl start nats-ws-gateway-and-server-logger.service
+
+systemctl enable --now nats-ws-gateway-and-server-logger.service
+
+systemctl restart nats-ws-gateway-and-server-logger.service
 
 exit 0
