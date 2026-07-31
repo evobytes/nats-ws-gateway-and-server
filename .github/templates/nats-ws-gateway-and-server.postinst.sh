@@ -24,7 +24,9 @@ chmod a+x /usr/bin/nats-ws-gateway-and-server || true
 # The service file is installed by the package, but systemd needs to be
 # reloaded to see the new unit file.
 systemctl daemon-reload
-systemctl enable nats-ws-gateway-and-server.service
-systemctl start nats-ws-gateway-and-server.service
+
+systemctl enable --now nats-ws-gateway-and-server.service
+
+systemctl restart nats-ws-gateway-and-server.service
 
 exit 0
