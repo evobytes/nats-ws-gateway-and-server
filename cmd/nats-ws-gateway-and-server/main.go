@@ -223,7 +223,7 @@ func main() {
 		}
 
 		switch {
-		case topic == "status" && r.Method == http.MethodPost:
+		case topic == "status" && r.Method == "QUERY":
 			// Handle status command
 			handleStatus(w, r, startTime, tracker)
 		case r.Method == http.MethodGet:
