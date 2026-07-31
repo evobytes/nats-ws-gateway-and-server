@@ -35,3 +35,21 @@ This should be the responsibility of the proxy environment.
 Client apps running on the same host as the server app could use ws://127.1:8080/ to connect.
 Native NATS is run on port 5050.
 
+## Special methods
+
+The http api supports a `/status` endpoint that must be requested using the `QUERY` method.
+It returns status for the server, including observed topics and info for each.
+
+```bash
+$ curl -X QUERY http://127.0.0.1:8080/status
+{
+  "uptime": "48.394s",
+  "topics": [
+    {
+      "name": "testing123",
+      "lastMessage": "2026-07-31T15:16:05Z",
+      "messageCount": 1
+    }
+  ]
+}
+```
